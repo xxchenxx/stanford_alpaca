@@ -12,6 +12,10 @@ import openai
 import tqdm
 from openai import openai_object
 import copy
+import torch
+import torch.distributed as dist
+
+from transformers import TrainerCallback
 
 StrOrOpenAIObject = Union[str, openai_object.OpenAIObject]
 
@@ -171,3 +175,36 @@ def jload(f, mode="r"):
     jdict = json.load(f)
     f.close()
     return jdict
+
+
+class PerSampleLossTrainerCallback(TrainerCallback):
+
+    def on_step_begin(self, args, state, control, **kwargs):
+
+        if state.global_step % 500 == 0:
+            model = kwargs.get('model', None)
+            train_loader = kwargs.get('train_dataloader', None)
+            idxs = []
+            losses = []
+            for i, data in enumerate(train_loader):
+                idx = torch.stack(data['idx'])
+                idxs.append(idx)
+                del data['idx']
+                output = model(**data)
+                losses.append(output['loss'].detach())
+                if i > 100: break
+            idxs = torch.cat(idxs).reshape(-1).cuda().contiguous()
+            losses = torch.stack(losses).reshape(-1).cuda().contiguous()
+            id_list = [torch.zeros_like(idxs, dtype=torch.int64) for _ in range(args.world_size)]
+            dist.all_gather(id_list, idxs)
+            losses_list = [torch.zeros_like(losses) for _ in range(args.world_size)]
+            dist.all_gather(losses_list, losses)
+            print(id_list)
+            print(losses_list)
+            id_list = torch.cat(id_list, 0)
+            losses_list = torch.cat(losses_list, 0).detach().cpu().numpy()
+            samples_loss = {k: v for k,v in zip(id_list, losses_list)}
+            state.samples_loss = samples_loss
+            control.should_use_smaller_samples = True
+
+

@@ -23,6 +23,7 @@ import utils
 from torch.utils.data import Dataset
 from transformers import Trainer
 
+
 IGNORE_INDEX = -100
 DEFAULT_PAD_TOKEN = "[PAD]"
 DEFAULT_EOS_TOKEN = "</s>"
@@ -150,8 +151,8 @@ class SupervisedDataset(Dataset):
         return len(self.input_ids)
 
     def __getitem__(self, i) -> Dict[str, torch.Tensor]:
-        return dict(input_ids=self.input_ids[i], labels=self.labels[i])
-
+        result = dict(input_ids=self.input_ids[i], labels=self.labels[i], idx=torch.tensor(i))
+        return result
 
 @dataclass
 class DataCollatorForSupervisedDataset(object):
@@ -160,12 +161,13 @@ class DataCollatorForSupervisedDataset(object):
     tokenizer: transformers.PreTrainedTokenizer
 
     def __call__(self, instances: Sequence[Dict]) -> Dict[str, torch.Tensor]:
-        input_ids, labels = tuple([instance[key] for instance in instances] for key in ("input_ids", "labels"))
+        input_ids, labels, idx = tuple([instance[key] for instance in instances] for key in ("input_ids", "labels", "idx"))
         input_ids = torch.nn.utils.rnn.pad_sequence(
             input_ids, batch_first=True, padding_value=self.tokenizer.pad_token_id
         )
         labels = torch.nn.utils.rnn.pad_sequence(labels, batch_first=True, padding_value=IGNORE_INDEX)
         return dict(
+            idx=idx,
             input_ids=input_ids,
             labels=labels,
             attention_mask=input_ids.ne(self.tokenizer.pad_token_id),
@@ -212,11 +214,11 @@ def train():
     )
 
     data_module = make_supervised_data_module(tokenizer=tokenizer, data_args=data_args)
-    trainer = Trainer(model=model, tokenizer=tokenizer, args=training_args, **data_module)
+    record_callback = utils.PerSampleLossTrainerCallback()
+    trainer = Trainer(model=model, tokenizer=tokenizer, args=training_args, callbacks=[record_callback], **data_module)
     trainer.train()
     trainer.save_state()
     trainer.save_model(output_dir=training_args.output_dir)
-
 
 if __name__ == "__main__":
     train()
