@@ -195,7 +195,7 @@ class PerSampleLossTrainerCallback(TrainerCallback):
 
     def on_epoch_begin(self, args, state, control, **kwargs):
 
-        if True:
+        if state.global_step > 0:
             print("Inside the callback!")
             model = kwargs.get('model', None)
             train_loader = kwargs.get('train_dataloader', None)
@@ -208,7 +208,6 @@ class PerSampleLossTrainerCallback(TrainerCallback):
                 data = self._prepare_input(data, args)
                 output = model(**data)
                 losses.append(output['loss'].detach())
-                if i > 2: break
             idxs = torch.cat(idxs).reshape(-1).cuda().contiguous()
             losses = torch.stack(losses).reshape(-1).cuda().contiguous()
             if args.world_size > 1:
@@ -222,6 +221,6 @@ class PerSampleLossTrainerCallback(TrainerCallback):
             else:
                 samples_loss = {k: v for k,v in zip(idxs, losses)}
             state.samples_loss = samples_loss
-            control.should_use_smaller_samples = True
-
+            control.should_use_fewer_samples = True
+            print(control)
 
