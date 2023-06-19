@@ -151,7 +151,7 @@ class SupervisedDataset(Dataset):
         return len(self.input_ids)
 
     def __getitem__(self, i) -> Dict[str, torch.Tensor]:
-        result = dict(input_ids=self.input_ids[i], labels=self.labels[i], idx=torch.tensor(i))
+        result = dict(input_ids=self.input_ids[i], labels=self.labels[i], idx=i)
         return result
 
 @dataclass

@@ -7,6 +7,7 @@ import sys
 import time
 import json
 from typing import Optional, Sequence, Union
+from collections.abc import Mapping
 
 import openai
 import tqdm
@@ -179,31 +180,47 @@ def jload(f, mode="r"):
 
 class PerSampleLossTrainerCallback(TrainerCallback):
 
-    def on_step_begin(self, args, state, control, **kwargs):
+    def _prepare_input(self, data, args):
+        """
+        Prepares one `data` before feeding it to the model, be it a tensor or a nested list/dictionary of tensors.
+        """
+        if isinstance(data, Mapping):
+            return type(data)({k: self._prepare_input(v, args) for k, v in data.items()})
+        elif isinstance(data, (tuple, list)):
+            return type(data)(self._prepare_input(v, args) for v in data)
+        elif isinstance(data, torch.Tensor):
+            kwargs = {"device": args.device}
+            return data.to(**kwargs)
+        return data
 
-        if state.global_step % 500 == 0:
+    def on_epoch_begin(self, args, state, control, **kwargs):
+
+        if True:
+            print("Inside the callback!")
             model = kwargs.get('model', None)
             train_loader = kwargs.get('train_dataloader', None)
             idxs = []
             losses = []
             for i, data in enumerate(train_loader):
-                idx = torch.stack(data['idx'])
+                idx = torch.LongTensor(data['idx'])
                 idxs.append(idx)
                 del data['idx']
+                data = self._prepare_input(data, args)
                 output = model(**data)
                 losses.append(output['loss'].detach())
-                if i > 100: break
+                if i > 2: break
             idxs = torch.cat(idxs).reshape(-1).cuda().contiguous()
             losses = torch.stack(losses).reshape(-1).cuda().contiguous()
-            id_list = [torch.zeros_like(idxs, dtype=torch.int64) for _ in range(args.world_size)]
-            dist.all_gather(id_list, idxs)
-            losses_list = [torch.zeros_like(losses) for _ in range(args.world_size)]
-            dist.all_gather(losses_list, losses)
-            print(id_list)
-            print(losses_list)
-            id_list = torch.cat(id_list, 0)
-            losses_list = torch.cat(losses_list, 0).detach().cpu().numpy()
-            samples_loss = {k: v for k,v in zip(id_list, losses_list)}
+            if args.world_size > 1:
+                id_list = [torch.zeros_like(idxs, dtype=torch.int64) for _ in range(args.world_size)]
+                dist.all_gather(id_list, idxs)
+                losses_list = [torch.zeros_like(losses) for _ in range(args.world_size)]
+                dist.all_gather(losses_list, losses)
+                id_list = torch.cat(id_list, 0)
+                losses_list = torch.cat(losses_list, 0).detach().cpu().numpy()
+                samples_loss = {k: v for k,v in zip(id_list, losses_list)}
+            else:
+                samples_loss = {k: v for k,v in zip(idxs, losses)}
             state.samples_loss = samples_loss
             control.should_use_smaller_samples = True
 
