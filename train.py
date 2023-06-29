@@ -212,7 +212,7 @@ def train():
         tokenizer=tokenizer,
         model=model,
     )
-
+    training_args.counter = 0
     data_module = make_supervised_data_module(tokenizer=tokenizer, data_args=data_args)
     record_callback = utils.PerSampleLossTrainerCallback()
     trainer = Trainer(model=model, tokenizer=tokenizer, args=training_args, callbacks=[record_callback], **data_module)

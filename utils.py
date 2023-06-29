@@ -194,7 +194,8 @@ class PerSampleLossTrainerCallback(TrainerCallback):
         return data
 
     def on_epoch_begin(self, args, state, control, **kwargs):
-        if state.global_step > 0:
+        args.counter += 1
+        if args.counter == 2:
             print("Inside the callback!")
             model = kwargs.get('model', None)
             train_loader = kwargs.get('train_dataloader', None)
