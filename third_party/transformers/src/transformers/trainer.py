@@ -1001,7 +1001,7 @@ class Trainer:
     def get_repeat_samples(self, state):
         samples_loss = state.samples_loss
         sorted_samples_loss = {int(k.item()): v for k, v in sorted(samples_loss.items(), key=lambda item: item[1])}
-        return list(sorted_samples_loss.keys())[-1000:]
+        return list(sorted_samples_loss.keys())[-26000:]
 
     def get_train_dataloader(self, subset=None) -> DataLoader:
         """
@@ -2025,7 +2025,6 @@ class Trainer:
         for epoch in range(epochs_trained, num_train_epochs):
             self.control = self.callback_handler.on_epoch_begin(args, self.state, self.control)
             # self.control.should_use_fewer_samples = True
-            print(self.control)
             if self.control.should_use_fewer_samples:
                 mask = self.get_repeat_samples(self.state)
                 self.original_train_dataloader = train_dataloader

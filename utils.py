@@ -194,7 +194,6 @@ class PerSampleLossTrainerCallback(TrainerCallback):
         return data
 
     def on_epoch_begin(self, args, state, control, **kwargs):
-
         if state.global_step > 0:
             print("Inside the callback!")
             model = kwargs.get('model', None)
@@ -222,5 +221,4 @@ class PerSampleLossTrainerCallback(TrainerCallback):
                 samples_loss = {k: v for k,v in zip(idxs, losses)}
             state.samples_loss = samples_loss
             control.should_use_fewer_samples = True
-            print(control)
 
